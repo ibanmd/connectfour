@@ -1,5 +1,5 @@
 
-# Purpose of this file is just to plot the % of 100 games one after
+# Purpose of this file is just to plot the % of 100 games won after
 # the model is trained for 100 iterations, and then repeats
 
 while(FALSE){

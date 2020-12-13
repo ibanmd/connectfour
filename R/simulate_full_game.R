@@ -28,7 +28,12 @@ simulate_full_game <- function(player1_model = NULL, player2_model = NULL, print
     # Based on who's turn it is, find out where they'd like to move
     if (player_turn == 1) {
       # Player 1 uses the neural net to choose its move
-      position <- choose_next_move(game_board = game_board, player_model = player1_model)
+      if (is.null(player1_model)) {
+        position <- choose_random_position(game_board = game_board)
+      } else {
+        position <- choose_next_move(game_board = game_board, player_model = player1_model)
+      }
+
     } else {
       # Player 2 goes random
       position <- choose_random_position(game_board = game_board)
