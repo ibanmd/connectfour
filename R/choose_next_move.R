@@ -6,20 +6,19 @@ choose_next_move <- function(game_board = NULL,
   # Find which cells are free
   free_moves <- which(game_board[1, ] == 0)
 
-  # Prepare data for model
-  nndata <- as.data.frame(matrix(as.vector(game_board), nrow = 1))
-  names(nndata) <- paste0("X", 1:42)
+  game_board[game_board == 2] <- -1
 
-  # Find which positions the model chose
-  selected_positions <- round(predict(player_model, nndata), 4)[1, ]
+  state_values <- unlist(lapply(free_moves, function(x){
+    played_move <- add_player_move(game_board = game_board, player_num = 1, position = x)
+    updated_board <- array_reshape(played_move, c(1, 6, 7, 1))
+    selected_positions <- model %>% predict(updated_board) %>% round()
+  }))
 
-  selected_positions <- data.table(Positions = 1:7,
-                                   Percentage = selected_positions)
-
-  selected_positions <- selected_positions[selected_positions$Positions %in% free_moves, ]
-  position <- selected_positions[order(-selected_positions$Percentage), ]$Positions[1]
-
-  # position <- choose_random_position(game_board = game_board)
+  if(all(state_values == 0)){
+    position <- sample(free_moves, size = 1)
+  } else {
+    position <- free_moves[which.max(state_values)]
+  }
 
   return(position)
 

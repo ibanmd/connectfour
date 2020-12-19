@@ -1,64 +1,82 @@
 
 library(neuralnet)
+library(keras)
+library(ggplot2)
 
-train_neural_network <- function(training_data, weights){
+train_neural_network <- function(training_data, weights = NULL){
 
-  # TODO - add a little noise to the vector so it's not quite all zeroes ?
+  # All data is in Player 1's perspective.  (On the board, 1 means self, 2 means opponent,
+  # and 20 means Player 1 won, 0 means start of the game, and -20 means opponent won the game)
 
-  # Put all data in player 1's perspective (plus this allows some training data
-  # where the opposing player goes first)
+  training_data <-
+    read_simulation_results(simulation_output_folder =
+                              paste0("/Users/marioibanez/Desktop/Studying/ConnectFour/Training_Runs/training_run_20201214_trainedp1_1layer_yes_mirror_randomp2//"),
+                                           mirror = TRUE)
 
-  reverse_1and2 <- Vectorize(function(game_state){
+  x_train <- array_reshape(training_data$board_array,
+                           dim = c(dim(training_data$board_array)[1], 6, 7, 1))
 
-    game_state <- unlist(strsplit(game_state, ","))
-    one_pos <- which(game_state == "1")
-    two_pos <- which(game_state == "2")
-    game_state[one_pos] <- "2"
-    game_state[two_pos] <- "1"
-    game_state <- paste0(game_state, collapse = ",")
-    game_state
+  x_train[x_train == 2] <- -1
 
-  })
+  #x_train[33,,,]
 
-  training_data[, Game_State_Player1 := ifelse(Player == 1,
-                                               Game_State,
-                                               reverse_1and2(Game_State))]
+  model <- keras_model_sequential() %>%
+    layer_conv_2d(filters = 4,
+                  kernel_size = c(4, 4),
+                  activation = 'relu',
+                  padding = "same",
+                  input_shape = c(6, 7, 1)) %>%
+    # layer_conv_2d(filters = 4,
+    #               kernel_size = c(4, 4),
+    #               padding = "same",
+    #               activation = 'relu') %>%
+    layer_flatten() %>%
+    layer_dense(units = 10,
+                activation = 'relu') %>%
+    layer_dense(units = 5,
+                activation = 'relu') %>%
+    layer_dense(units = 1)
 
-  # Format data into 42 columns for the game board slots and 7 for the response
-  training_data_df <- data.frame(matrix(as.numeric(unlist(strsplit(paste0(training_data$Game_State_Player1,
-                                                                          collapse = ","), split = ","))) +
-                                          runif(n = length(training_data$Game_State_Player1), min = -0.1, max = 0.1),
-                                        nrow = nrow(training_data),
-                                        byrow = TRUE))
+  model %>% summary()
 
-  training_names <- names(training_data_df)
+  model %>% compile(
+    loss = loss_mean_squared_error,
+    optimizer = optimizer_adadelta(),
+    metrics = c('accuracy')
+  )
 
-  onehotcols <- data.frame(t(sapply(training_data$Chosen_Position,
-                                    function(x){tmp <- rep(0, 7); tmp[x] <- 1; tmp})))
-  names(onehotcols) <- paste0("Position", 1:7)
+  batch_size <- 2000
+  epochs <- 100
 
-  training_data_df <- cbind(training_data_df, onehotcols)
+  # Train model
+  model %>% fit(
+    x_train,
+    training_data$board_value_array,
+    batch_size = batch_size,
+    epochs = epochs,
+    validation_split = 0.2
+  )
 
-  training_data_turn5 <- training_data_df[unlist(lapply(gregexpr("0", training_data$Game_State),
-                                                        function(x) {length(x)})) < 39, ]
+  predictions <- model %>% predict(x_train) %>% round()
+  print(ggplot(data.frame(actual = training_data$board_value_array,
+                    predicted = predictions),
+         aes(actual, predicted)) +
+    geom_jitter(alpha = 0.2) +
+    geom_smooth(se = FALSE))
 
-  # f <- one hot columns ~ all other predictor columns
-  f <- as.formula(paste0(paste(names(onehotcols), collapse = "+"),
-                         "~",
-                         paste(training_names, collapse = "+")
-                         ))
-
-  nn_model <- neuralnet(f,
-                        data = training_data_df,
-                        hidden = c(3),
-                        threshold = 0.1,
-                        act.fct = "logistic",
-                        startweights = weights,
-                        #stepmax = iterations,
-                        linear.output = FALSE,
-                        lifesign = "minimal")
-
-  return(nn_model)
+  print("Saving model")
+  model %>% save_model_weights_hdf5("/Users/marioibanez/Desktop/Studying/ConnectFour/Models/model_one_layer_yes_mirror_20weight.hdf5",
+                                    overwrite = TRUE)
 
 }
+
+
+
+
+
+
+
+
+
+
 
